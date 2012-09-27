@@ -1,8 +1,8 @@
 $:.unshift File.join(__FILE__, '..', 'lib')
-require "zeus-rails-2-3/version"
+require "zeus/rails23/version"
 
 Gem::Specification.new do |s|
-  s.name        = "zeus-rails-2-3"
+  s.name        = "zeus-rails23"
   s.version     = ::Zeus::Rails23::VERSION
   s.authors     = ["Tyler Smith"]
   s.email       = 'tylersmith.me@gmail.com'
