@@ -1,9 +1,8 @@
-require 'rubygems'
-require 'zeus'
-
 ROOT_PATH = File.expand_path(Dir.pwd)
 ENV_PATH  = File.expand_path('config/environment',  ROOT_PATH)
 BOOT_PATH = File.expand_path('config/boot',  ROOT_PATH)
+
+require 'zeus'
 
 module Zeus::Rails23
   class Plan < Zeus::Plan
@@ -24,6 +23,19 @@ module Zeus::Rails23
     def development_environment
       load_env('development')
       load_bundler_env :development
+
+      @irb = begin
+        require 'irb'
+        ::IRB.instance_eval do
+          @CONF[:LOAD_MODULES] ||= []
+          @CONF[:LOAD_MODULES] << 'irb/completion'
+          @CONF[:LOAD_MODULES] << '%( -r "#{RAILS_ROOT}/config/environment")'
+          @CONF[:LOAD_MODULES] << 'console_app'
+          @CONF[:LOAD_MODULES] << 'console_with_helpers'
+        end
+
+        IRB
+      end
     end
 
     def server
@@ -31,8 +43,35 @@ module Zeus::Rails23
     end
 
     def console
-      require 'commands/console'
+      @irb.start
     end
+
+    def test_environment
+      $rails_rake_task = 'yup' # lie to skip eager loading
+      load_env('test')
+      $rails_rake_task = nil
+      load_bundler_env :test
+      _monkeypatch_rake
+
+      $LOAD_PATH.unshift ".", "./lib", "./test", "./spec"
+    end
+
+  protected
+    def load_env(env)
+      ENV['RAILS_ENV'] = env
+      require ENV_PATH
+      ::Rails.instance_eval do
+        @_env = ::ActiveSupport::StringInquirer.new(env)
+      end
+    end
+
+    def load_bundler_env(env)
+      env = env.to_sym
+      @bundler ||= {}
+      @bundler[:default] ||= !!::Bundler.require(:default)
+      @bundler[env] ||= !!::Bundler.require(env)
+    end
+  end
 
     def _monkeypatch_rake
       require 'rake/testtask'
@@ -74,43 +113,6 @@ module Zeus::Rails23
         end
       }
     end
-
-    def test_environment
-      $rails_rake_task = 'yup' # lie to skip eager loading
-      load_env('test')
-      $rails_rake_task = nil
-      load_bundler_env :test
-      _monkeypatch_rake
-
-      $LOAD_PATH.unshift ".", "./lib", "./test", "./spec"
-    end
-
-    def test_helper
-      if File.exists?(ROOT_PATH + "/spec/spec_helper.rb")
-        require 'spec_helper'
-      elsif File.exist?(ROOT_PATH + "/test/minitest_helper.rb")
-        require 'minitest_helper'
-      else
-        require 'test_helper'
-      end
-    end
-
-  protected
-    def load_env(env)
-      ENV['RAILS_ENV'] = env
-      require ENV_PATH
-      ::Rails.instance_eval do
-        @_env = ::ActiveSupport::StringInquirer.new(env)
-      end
-    end
-
-    def load_bundler_env(env)
-      env = env.to_sym
-      @bundler ||= {}
-      @bundler[:default] ||= !!::Bundler.require(:default)
-      @bundler[env] ||= !!::Bundler.require(env)
-    end
-  end
 end
 
 Zeus.plan = Zeus::Rails23::Plan.new
